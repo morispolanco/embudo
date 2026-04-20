@@ -1,5 +1,5 @@
 import io
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -33,6 +33,9 @@ DEFAULT_STAGE_ORDER = [
     "Cierre",
 ]
 
+DEMO_SALESPEOPLE = ["Ana", "Luis", "Carlos", "María"]
+DEMO_STAGE_WEIGHTS = [30, 25, 20, 15, 10]
+
 
 # -----------------------------
 # Utilidades
@@ -60,6 +63,29 @@ def load_file(uploaded_file) -> pd.DataFrame:
     else:
         raise ValueError("Formato no soportado. Usa CSV o Excel.")
     return df
+
+
+@st.cache_data(show_spinner=False)
+def generate_demo_data(num_records: int = 200) -> pd.DataFrame:
+    """Genera un dataset ficticio listo para probar la app."""
+    base_date = datetime(2026, 1, 1)
+    stages = DEFAULT_STAGE_ORDER.copy()
+    rows = []
+
+    for i in range(1, num_records + 1):
+        stage_index = np.random.choice(len(stages), p=np.array(DEMO_STAGE_WEIGHTS) / np.sum(DEMO_STAGE_WEIGHTS))
+        stage = stages[int(stage_index)]
+        rows.append(
+            {
+                "cliente_id": i,
+                "etapa": stage,
+                "fecha": (base_date + timedelta(days=int(np.random.randint(0, 90)))).strftime("%Y-%m-%d"),
+                "vendedor": str(np.random.choice(DEMO_SALESPEOPLE)),
+                "monto": int(np.random.randint(500, 5000)),
+            }
+        )
+
+    return pd.DataFrame(rows)
 
 
 def normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
@@ -158,7 +184,23 @@ def login_view() -> None:
 # -----------------------------
 def data_loader_view() -> pd.DataFrame | None:
     st.subheader("1. Carga de datos")
-    uploaded = st.file_uploader("Sube un archivo CSV o Excel", type=["csv", "xlsx", "xls"])
+    st.caption("Puedes subir un archivo propio o cargar un demo ficticio para probar la aplicación.")
+
+    col_a, col_b = st.columns([2, 1])
+    with col_a:
+        uploaded = st.file_uploader("Sube un archivo CSV o Excel", type=["csv", "xlsx", "xls"])
+    with col_b:
+        demo_size = st.selectbox("Registros demo", [50, 100, 200, 500], index=2)
+        load_demo = st.button("Cargar demo ficticio")
+
+    if load_demo:
+        df = generate_demo_data(int(demo_size))
+        df = normalize_columns(df)
+        st.session_state.data = df
+        st.success(f"Demo cargado: {df.shape[0]} filas y {df.shape[1]} columnas")
+        st.dataframe(df.head(20), use_container_width=True)
+        return df
+
     if uploaded is None:
         return None
 
@@ -173,9 +215,6 @@ def data_loader_view() -> pd.DataFrame | None:
         return None
 
 
-# -----------------------------
-# Analisis del embudo
-# -----------------------------
 def funnel_analysis_view(df: pd.DataFrame, stage_col: str, salesperson_col: str | None, date_col: str | None) -> None:
     st.subheader("2. Analisis del embudo")
 
